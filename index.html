@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mavalo Warehouse</title>
+  <meta name="description" content="Mavalo là ứng dụng kho Android cho hàng gửi xuyên biên giới: nhập kho có ảnh, cân, đo; đóng thùng có chặn lỗi; tiếp nhận; in tem 58mm tại chỗ. Chạy được khi kho mất mạng.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23141513'/%3E%3Cpath fill='%23f1f1ec' d='M6 7h2v18H6zM10 7h1v18h-1zM13 7h3v18h-3zM18 7h1v18h-1zM21 7h2v18h-2zM25 7h1v18h-1z'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* Layout: trang như một chồng tem vận chuyển. Khung kẻ đậm, ô dữ liệu, chữ condensed in hoa cho nhãn,
+       mono cho mã. Màu nhấn duy nhất là đỏ tia quét, chỉ dùng cho trạng thái quét và lỗi. */
+    :root {
+      --paper: #f1f1ec;
+      --paper-2: #e6e6df;
+      --ink: #141513;
+      --ink-2: #55564f;
+      --hair: #c9c9c0;
+      --laser: #d9231a;
+      --ok: #1f7a46;
+      --wait: #a86f00;
+      --thermal: #fcfcf9;
+      --thermal-ink: #141513;
+      --kraft: #b88a5c;
+      --kraft-2: #9c7046;
+      --band: #161714;
+      --band-2: #22241f;
+      --band-fg: #ecece5;
+      --band-mute: #a2a398;
+      --band-line: #3a3c35;
+
+      --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+      --f-body: "Barlow", "Segoe UI", system-ui, sans-serif;
+      --f-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+      --rule: 2px solid var(--ink);
+      --gut: clamp(16px, 4vw, 40px);
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --paper: #121311; --paper-2: #1a1b18; --ink: #ebebe4; --ink-2: #a3a49a; --hair: #34352f;
+        --laser: #ff4b3e; --ok: #4fc283; --wait: #e2a83a;
+        --band: #1b1c19; --band-2: #24261f; --band-fg: #ecece5; --band-mute: #a2a398; --band-line: #3a3c35;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --paper: #121311; --paper-2: #1a1b18; --ink: #ebebe4; --ink-2: #a3a49a; --hair: #34352f;
+      --laser: #ff4b3e; --ok: #4fc283; --wait: #e2a83a;
+      --band: #1b1c19; --band-2: #24261f; --band-fg: #ecece5; --band-mute: #a2a398; --band-line: #3a3c35;
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--f-body); -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid var(--laser); outline-offset: 2px; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding-inline: var(--gut); }
+    .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+    .lbl { font-family: var(--f-display); font-weight: 700; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3 { font-family: var(--f-display); font-weight: 700; margin: 0; text-wrap: balance; letter-spacing: -0.005em; }
+    p { margin: 0; }
+
+    /* ---------- header ---------- */
+    .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: var(--paper); border-bottom: var(--rule); }
+    .top .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--f-display); font-weight: 800; font-size: 26px; letter-spacing: .04em; }
+    .brand svg { height: 22px; width: auto; }
+    .nav { display: flex; gap: 22px; margin-left: auto; }
+    .nav a { text-decoration: none; font-family: var(--f-display); font-weight: 600; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+    .nav a:hover { color: var(--ink); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 22px; background: var(--ink); color: var(--paper); border: var(--rule); font-family: var(--f-display); font-weight: 700; font-size: 16px; letter-spacing: .1em; text-transform: uppercase; text-decoration: none; cursor: pointer; }
+    .btn:hover { background: var(--laser); border-color: var(--laser); color: #fff; }
+    .btn.ghost { background: transparent; color: var(--ink); }
+    .btn.ghost:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .top .btn { min-height: 40px; padding: 0 16px; font-size: 14px; }
+
+    /* ---------- hero ---------- */
+    .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: clamp(32px, 5vw, 72px); padding-block: clamp(40px, 7vw, 88px) clamp(48px, 7vw, 96px); align-items: start; }
+    .hero .lbl { color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero h1 { font-size: clamp(46px, 7.4vw, 96px); line-height: .98; font-weight: 800; margin-top: 22px; letter-spacing: -0.015em; }
+    .hero h1 .soft { display: block; color: var(--ink-2); font-weight: 600; }
+    .hero .lead { margin-top: 28px; font-size: 19px; max-width: 34em; color: var(--ink-2); }
+    .hero .lead b { color: var(--ink); font-weight: 600; }
+    .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+    .codes { margin-top: 40px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .codes span { font-family: var(--f-mono); font-size: 12.5px; padding: 4px 9px; border: 1px solid var(--hair); color: var(--ink-2); }
+
+    /* scanner stage */
+    .stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+    .thermal { background: var(--thermal); color: var(--thermal-ink); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; padding: 18px 20px 20px; position: relative; box-shadow: 0 1px 0 rgba(0,0,0,.08), 0 18px 40px -18px rgba(0,0,0,.35); }
+    .thermal.tear::before, .thermal.tear::after { content: ""; position: absolute; left: 0; right: 0; height: 7px; background: linear-gradient(135deg, var(--thermal) 50%, transparent 50%) 0 0 / 10px 7px repeat-x, linear-gradient(225deg, var(--thermal) 50%, transparent 50%) 0 0 / 10px 7px repeat-x; }
+    .thermal.tear::before { top: -7px; transform: scaleY(-1); }
+    .thermal.tear::after { bottom: -7px; }
+    .thermal .hd { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; letter-spacing: .06em; }
+    .thermal hr { border: 0; border-top: 1.5px dashed var(--thermal-ink); margin: 10px 0; opacity: .8; }
+    .thermal .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 14px; }
+    .thermal .big { font-family: var(--f-display); font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: .02em; text-align: center; }
+    .bc { position: relative; margin: 8px 0 4px; }
+    .bc svg { width: 100%; height: 64px; display: block; }
+    .bc + .human { text-align: center; font-weight: 700; letter-spacing: .12em; }
+    .laser { position: absolute; left: -10px; right: -10px; top: 50%; height: 2px; background: var(--laser); box-shadow: 0 0 10px 2px color-mix(in srgb, var(--laser) 55%, transparent); animation: sweep 2.6s ease-in-out infinite; }
+    @keyframes sweep { 0%, 100% { top: 8%; } 50% { top: 88%; } }
+
+    .log { border: var(--rule); background: var(--paper); }
+    .log-hd { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: var(--rule); }
+    .log-hd .live { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-mono); font-size: 12px; color: var(--wait); }
+    .log-hd .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .log table { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    .log td { padding: 7px 12px; border-top: 1px solid var(--hair); white-space: nowrap; }
+    .log tr:first-child td { border-top: 0; }
+    .log td:last-child { text-align: right; }
+    .tag { font-family: var(--f-display); font-weight: 700; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; }
+    .tag.ok { color: var(--ok); } .tag.wait { color: var(--wait); } .tag.no { color: var(--laser); }
+    .scroll-x { overflow-x: auto; }
+    .note { font-size: 13px; color: var(--ink-2); }
+
+    /* ---------- sections ---------- */
+    .sec { border-top: var(--rule); padding-block: clamp(56px, 8vw, 104px); }
+    .sec-hd { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(20px, 4vw, 56px); align-items: end; margin-bottom: clamp(32px, 5vw, 56px); }
+    .sec-hd h2 { font-size: clamp(38px, 5vw, 64px); line-height: 1; font-weight: 800; }
+    .sec-hd p { color: var(--ink-2); font-size: 18px; max-width: 36em; }
+    .sec-hd .lbl { display: block; color: var(--laser); margin-bottom: 14px; }
+
+    /* route / boarding pass */
+    .route { border: var(--rule); display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, .9fr) minmax(0, 2fr); }
+    .leg { padding: 20px 22px 24px; min-width: 0; }
+    .leg + .leg { border-left: var(--rule); }
+    .leg .stn { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .leg .stn b { font-family: var(--f-display); font-weight: 800; font-size: clamp(48px, 6vw, 72px); line-height: .9; letter-spacing: .02em; }
+    .leg .stn span { color: var(--ink-2); }
+    .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; padding-top: 18px; border-top: 1px dashed var(--hair); }
+    .steps h3 { font-size: 24px; display: flex; gap: 10px; align-items: baseline; }
+    .steps h3 i { font-style: normal; font-family: var(--f-mono); font-size: 13px; font-weight: 500; color: var(--ink-2); }
+    .steps p { color: var(--ink-2); font-size: 15.5px; margin-top: 4px; }
+    .leg.fly { display: grid; place-content: center; text-align: center; gap: 10px; background: var(--paper-2); }
+    .leg.fly svg { width: 44px; height: 44px; margin: 0 auto; }
+    .leg.fly p { color: var(--ink-2); font-size: 15px; }
+    .route-note { margin-top: 12px; }
+
+    /* ledger */
+    .ledger { border-top: var(--rule); }
+    .row { display: grid; grid-template-columns: 88px minmax(0, 4fr) minmax(0, 5fr); gap: clamp(16px, 3vw, 40px); padding-block: clamp(28px, 4vw, 44px); border-bottom: 1px solid var(--hair); }
+    .row:last-child { border-bottom: var(--rule); }
+    .row .no { font-family: var(--f-display); font-weight: 800; font-size: 56px; line-height: .85; color: var(--hair); }
+    .row h3 { font-size: clamp(32px, 3.4vw, 42px); line-height: 1; font-weight: 800; }
+    .row .body p { color: var(--ink-2); margin-top: 12px; max-width: 32em; }
+    .row ul { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+    .row li { padding-left: 22px; position: relative; }
+    .row li::before { content: ""; position: absolute; left: 0; top: .72em; width: 12px; height: 2px; background: var(--ink); }
+    .panel { border: var(--rule); align-self: start; min-width: 0; }
+    .panel-hd { padding: 8px 14px; border-bottom: var(--rule); display: flex; justify-content: space-between; gap: 12px; }
+    .panel-hd .mono { font-size: 12px; color: var(--ink-2); }
+    .fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .fields div { padding: 10px 14px; border-right: 1px solid var(--hair); }
+    .fields div:last-child { border-right: 0; }
+    .fields b { display: block; font-family: var(--f-mono); font-size: 22px; font-weight: 700; }
+    .fields .empty b { color: var(--laser); }
+    .missing { border-top: 1px solid var(--hair); padding: 10px 14px; font-family: var(--f-mono); font-size: 13px; color: var(--laser); }
+    .photos { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--hair); }
+    .photos div { padding: 10px 14px; display: flex; gap: 10px; align-items: center; font-size: 14px; }
+    .photos div + div { border-left: 1px solid var(--hair); }
+    .ph { width: 44px; height: 34px; flex: none; background: linear-gradient(135deg, var(--kraft), var(--kraft-2)); position: relative; }
+    .ph::after { content: ""; position: absolute; inset: 9px 12px 9px 12px; background: var(--thermal); }
+    .ph.none { background: none; border: 1.5px dashed var(--ink-2); }
+    .ph.none::after { display: none; }
+
+    .rej table { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 13px; }
+    .rej td { padding: 9px 14px; border-top: 1px solid var(--hair); vertical-align: top; }
+    .rej tr:first-child td { border-top: 0; }
+    .rej td:first-child { white-space: nowrap; font-weight: 700; }
+    .rej .x { color: var(--laser); font-weight: 700; margin-right: 6px; }
+    .rej td:last-child { font-family: var(--f-body); font-size: 14px; color: var(--ink-2); }
+    .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 18px; border: 1px solid var(--hair); }
+    .modes div { padding: 12px 14px; }
+    .modes div + div { border-left: 1px solid var(--hair); }
+    .modes b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 700; }
+    .modes span { font-size: 14px; color: var(--ink-2); line-height: 1.45; display: block; margin-top: 2px; }
+
+    .meter { padding: 14px; }
+    .meter .big { font-family: var(--f-display); font-weight: 800; font-size: 56px; line-height: 1; }
+    .meter .big small { font-size: 24px; color: var(--ink-2); font-weight: 600; }
+    .bar { height: 10px; background: var(--paper-2); margin-top: 10px; border: 1px solid var(--ink); }
+    .bar i { display: block; height: 100%; width: 71%; background: var(--ink); }
+    .split { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--hair); font-family: var(--f-mono); font-size: 13px; }
+    .split div { padding: 9px 14px; display: flex; justify-content: space-between; gap: 8px; }
+    .split div + div { border-left: 1px solid var(--hair); }
+
+    /* offline */
+    .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 36px; font-family: var(--f-mono); font-size: 14px; }
+    .flow .s { border: var(--rule); padding: 8px 14px; font-weight: 700; }
+    .flow .s small { display: block; font-family: var(--f-body); font-weight: 400; font-size: 13px; color: var(--ink-2); }
+    .flow .s.wait { border-color: var(--wait); }
+    .flow .s.ok { border-color: var(--ok); }
+    .flow .s.no { border-color: var(--laser); }
+    .flow .ar { color: var(--ink-2); }
+    .flow .or { display: grid; gap: 8px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; border: var(--rule); }
+    .cols > div { padding: 22px 24px; min-width: 0; }
+    .cols > div + div { border-left: var(--rule); }
+    .cols h3 { font-size: 26px; margin-bottom: 14px; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .cols ul { margin: 0; padding: 0; list-style: none; }
+    .cols li { padding: 9px 0; border-top: 1px solid var(--hair); }
+    .cols li:first-child { border-top: 0; }
+    .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 40px; margin-top: 48px; }
+    .facts dt { font-family: var(--f-display); font-weight: 700; font-size: 22px; }
+    .facts dd { margin: 6px 0 0; color: var(--ink-2); font-size: 16px; }
+
+    /* labels */
+    .strips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; align-items: start; }
+    .strip figcaption { margin-top: 18px; }
+    .strip figcaption b { font-family: var(--f-display); font-size: 20px; display: block; }
+    .strip figcaption span { font-size: 15px; color: var(--ink-2); }
+    figure { margin: 0; }
+    .hw { display: grid; grid-template-columns: 1fr 1fr; border: var(--rule); margin-top: 56px; }
+    .hw > div { padding: 22px 24px; min-width: 0; }
+    .hw > div + div { border-left: var(--rule); }
+    .hw h3 { font-size: 26px; }
+    .hw p { color: var(--ink-2); margin-top: 8px; }
+    .hw dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 16px 0 0; font-size: 15px; }
+    .hw dt { font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); padding-top: 2px; }
+    .hw dd { margin: 0; }
+
+    /* AI band */
+    .ai { background: var(--band); color: var(--band-fg); border-top: var(--rule); padding-block: clamp(64px, 9vw, 120px); }
+    .ai .sec-hd p { color: var(--band-mute); }
+    .ai .sec-hd .lbl { color: var(--laser); }
+    .dev { display: inline-block; vertical-align: middle; margin-left: 10px; font-family: var(--f-mono); font-size: 13px; font-weight: 500; letter-spacing: 0; padding: 4px 10px; border: 1px solid var(--band-mute); color: var(--band-mute); }
+    .ai-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 5vw, 64px); align-items: start; }
+    .uses { display: grid; gap: 0; border-top: 1px solid var(--band-line); }
+    .uses div { padding: 20px 0; border-bottom: 1px solid var(--band-line); }
+    .uses h3 { font-size: 26px; }
+    .uses p { color: var(--band-mute); margin-top: 6px; }
+    .today { margin-top: 28px; padding: 16px 18px; border: 1px dashed var(--band-line); color: var(--band-mute); font-size: 15px; }
+    .today b { color: var(--band-fg); }
+
+    .parcel { background: linear-gradient(160deg, var(--kraft), var(--kraft-2)); padding: 34px 30px; position: relative; overflow: hidden; }
+    .parcel::before { content: ""; position: absolute; left: 0; right: 0; top: 46%; height: 44px; background: rgba(240, 225, 190, .28); border-block: 1px solid rgba(255,255,255,.18); }
+    .sticker { position: relative; background: var(--thermal); color: var(--thermal-ink); padding: 18px 20px; font-family: var(--f-mono); font-size: 13px; line-height: 1.55; transform: rotate(-1.6deg); max-width: 380px; box-shadow: 0 10px 24px -12px rgba(0,0,0,.5); }
+    .sticker .k { font-size: 10.5px; letter-spacing: .08em; opacity: .65; }
+    .hit { position: relative; display: inline-block; outline: 2px solid var(--laser); outline-offset: 2px; }
+    .hit::after { content: attr(data-k); position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); background: var(--laser); color: #fff; font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .08em; padding: 1px 6px; white-space: nowrap; }
+    .json { margin-top: 22px; background: var(--band-2); border: 1px solid var(--band-line); padding: 16px 18px; font-family: var(--f-mono); font-size: 13px; line-height: 1.7; overflow-x: auto; white-space: pre; color: var(--band-fg); }
+    .json .s { color: #9fd6a8; } .json .n { color: #f0c37a; } .json .c { color: var(--band-mute); }
+    .ai .note { color: var(--band-mute); margin-top: 14px; }
+
+    /* specs */
+    .specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: var(--rule); }
+    .specs div { padding: 22px 24px; min-width: 0; }
+    .specs div + div { border-left: var(--rule); }
+    .specs b { display: block; font-family: var(--f-display); font-weight: 800; font-size: clamp(48px, 5vw, 68px); line-height: 1; }
+    .specs span { color: var(--ink-2); font-size: 15.5px; display: block; margin-top: 8px; }
+    .stack { margin-top: 18px; font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); line-height: 1.9; }
+
+    /* faq */
+    .faq { max-width: 860px; border-top: var(--rule); }
+    .faq details { border-bottom: 1px solid var(--hair); }
+    .faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 20px; padding: 20px 0; font-family: var(--f-display); font-weight: 700; font-size: 24px; line-height: 1.2; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: "+"; font-family: var(--f-mono); font-weight: 400; color: var(--ink-2); }
+    .faq details[open] summary::after { content: "−"; }
+    .faq p { padding: 0 0 22px; color: var(--ink-2); max-width: 40em; }
+
+    /* contact */
+    .contact { border: var(--rule); display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+    .contact > div { padding: clamp(24px, 4vw, 48px); min-width: 0; }
+    .contact > div + div { border-left: var(--rule); background: var(--paper-2); display: grid; align-content: center; gap: 16px; }
+    .contact h2 { font-size: clamp(40px, 5.4vw, 72px); line-height: .98; font-weight: 800; }
+    .contact p { color: var(--ink-2); margin-top: 18px; max-width: 30em; }
+    .mail { font-family: var(--f-mono); font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; user-select: all; overflow-wrap: anywhere; }
+    .contact .cta { margin-top: 0; }
+
+    footer { border-top: var(--rule); }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-block: 22px 32px; font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .laser { animation: none; top: 50%; }
+    }
+
+    @media (max-width: 1000px) {
+      .nav { display: none; }
+      .top .btn { margin-left: auto; }
+      .hero { grid-template-columns: minmax(0, 1fr); }
+      .sec-hd { grid-template-columns: minmax(0, 1fr); align-items: start; }
+      .row { grid-template-columns: 64px minmax(0, 1fr); }
+      .row .panel { grid-column: 2; }
+      .row .no { font-size: 44px; }
+      .ai-grid { grid-template-columns: minmax(0, 1fr); }
+      .strips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .specs div:nth-child(3) { border-left: 0; }
+      .specs div:nth-child(n+3) { border-top: var(--rule); }
+      .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      body { font-size: 16px; }
+      .route { grid-template-columns: minmax(0, 1fr); }
+      .leg + .leg { border-left: 0; border-top: var(--rule); }
+      .leg.fly { padding-block: 14px; grid-auto-flow: column; justify-content: start; align-items: center; text-align: left; }
+      .leg.fly svg { width: 30px; height: 30px; margin: 0; }
+      .row { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+      .row .panel { grid-column: auto; }
+      .row .no { font-size: 32px; }
+      .cols, .hw, .contact { grid-template-columns: minmax(0, 1fr); }
+      .cols > div + div, .hw > div + div, .contact > div + div { border-left: 0; border-top: var(--rule); }
+      .strips, .facts { grid-template-columns: minmax(0, 1fr); }
+      .modes { grid-template-columns: minmax(0, 1fr); }
+      .modes div + div { border-left: 0; border-top: 1px solid var(--hair); }
+      .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .fields div:nth-child(2) { border-right: 0; }
+      .fields div:nth-child(n+3) { border-top: 1px solid var(--hair); }
+      .photos { grid-template-columns: minmax(0, 1fr); }
+      .photos div + div { border-left: 0; border-top: 1px solid var(--hair); }
+      .specs { grid-template-columns: minmax(0, 1fr); }
+      .specs div + div { border-left: 0; border-top: var(--rule); }
+      .parcel { padding: 28px 16px; }
+      .faq summary { font-size: 21px; }
+      .log td { padding: 7px 10px; }
+      .log td:nth-child(3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#">
+        <svg viewBox="0 0 26 22" aria-hidden="true"><path fill="currentColor" d="M0 0h3v22H0zM5 0h1v22H5zM8 0h4v22H8zM14 0h1v22h-1zM17 0h2v22h-2zM21 0h1v22h-1zM24 0h2v22h-2z"/></svg>
+        MAVALO
+      </a>
+      <nav class="nav" aria-label="Mục lục">
+        <a href="#hanh-trinh">Hành trình</a>
+        <a href="#ban-kho">Bàn kho</a>
+        <a href="#offline">Offline</a>
+        <a href="#tem">Tem &amp; máy in</a>
+        <a href="#ai">AI</a>
+      </nav>
+      <a class="btn" href="#lien-he">Đặt lịch demo</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <div class="wrap hero">
+      <div>
+        <div class="lbl">Ứng dụng kho · Android · Hàng gửi xuyên biên giới</div>
+        <h1>Mỗi kiện qua tay đều có ảnh, có cân, có tem.<span class="soft">Kể cả khi kho mất sóng.</span></h1>
+        <p class="lead">Mavalo chạy trên máy POS cầm tay hoặc điện thoại Android. Nhân viên <b>quét mã, chụp ảnh, cân, đo và in tem</b> ngay tại bàn. Dữ liệu lưu trên máy trước, gửi lên hệ thống khi có mạng.</p>
+        <div class="cta">
+          <a class="btn" href="#lien-he">Đặt lịch demo</a>
+          <a class="btn ghost" href="#hanh-trinh">Xem hành trình kiện</a>
+        </div>
+        <div class="codes" aria-label="Loại mã vạch hỗ trợ">
+          <span>CODE128</span><span>CODE39</span><span>QR</span><span>EAN-13</span><span>EAN-8</span><span>PDF417</span><span>DATAMATRIX</span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="thermal tear" aria-label="Tem kiện mẫu, khổ 58mm">
+          <div class="hd"><span>MAVALO · PARCEL</span><span>58MM</span></div>
+          <hr>
+          <div class="bc"><svg data-barcode="MV24081173" preserveAspectRatio="none" aria-hidden="true"></svg><span class="laser" aria-hidden="true"></span></div>
+          <div class="human">MV24081173</div>
+          <hr>
+          <div class="grid">
+            <span>L 42  W 30  H 25</span><span>KG 3.20</span>
+            <span>WH: JKT-01</span><span>CUS: C01842</span>
+            <span>STAFF: S0125</span><span>12/09 09:41</span>
+          </div>
+        </div>
+
+        <div class="log">
+          <div class="log-hd"><span class="lbl">Nhật ký quét · ca sáng</span><span class="live">3 chờ gửi</span></div>
+          <div class="scroll-x">
+            <table>
+              <tr><td>09:41:02</td><td>MV24081173</td><td>3.20 kg</td><td><span class="tag wait">Chờ gửi</span></td></tr>
+              <tr><td>09:40:37</td><td>MV24081168</td><td>0.85 kg</td><td><span class="tag wait">Chờ gửi</span></td></tr>
+              <tr><td>09:39:55</td><td>MV24081190</td><td>&nbsp;</td><td><span class="tag no">Đã trong thùng khác</span></td></tr>
+              <tr><td>09:39:12</td><td>MV24081152</td><td>12.40 kg</td><td><span class="tag wait">Chờ gửi</span></td></tr>
+              <tr><td>09:31:48</td><td>MV24081147</td><td>2.10 kg</td><td><span class="tag ok">Đã đồng bộ</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <p class="note">Mã vạch trên trang là Code128 thật, máy quét đọc được. Dữ liệu trong tem và nhật ký là minh hoạ.</p>
+      </div>
+    </div>
+
+    <!-- HÀNH TRÌNH -->
+    <section class="sec" id="hanh-trinh">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Hành trình kiện</span><h2>Hai kho, một ứng dụng.</h2></div>
+          <p>Mavalo có hai chế độ. <b>Kho Gom</b> ở nước gửi nhận kiện từ các sàn thương mại điện tử và đóng thùng. <b>Kho Phát</b> ở Việt Nam tiếp nhận thùng và giao cho hãng vận chuyển nội địa. Nhân viên chỉ thấy kho mình được phân công.</p>
+        </div>
+        <div class="route">
+          <div class="leg">
+            <div class="lbl">Kho Gom</div>
+            <div class="stn"><b>JKT</b><span>Jakarta, Indonesia</span></div>
+            <div class="steps">
+              <div><h3><i>01</i>Nhập kho</h3><p>Quét mã vận đơn, chụp ảnh, cân, đo, in tem kiện.</p></div>
+              <div><h3><i>02</i>Đóng thùng</h3><p>Quét kiện vào thùng theo tuyến, in tem thùng.</p></div>
+            </div>
+          </div>
+          <div class="leg fly">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 21l1.5-1v-5.5l8 2.5v-2l-8-5V4.5a1.5 1.5 0 0 0-3 0V10l-8 5v2l8-2.5V20l1.5 1z"/></svg>
+            <div><div class="lbl">03 · Chuyến bay</div><p>Thùng lên máy bay</p></div>
+          </div>
+          <div class="leg">
+            <div class="lbl">Kho Phát</div>
+            <div class="stn"><b>SGN</b><span>TP. Hồ Chí Minh</span></div>
+            <div class="steps">
+              <div><h3><i>04</i>Tiếp nhận</h3><p>Quét thùng, rồi quét từng kiện bên trong.</p></div>
+              <div><h3><i>05</i>Giao hãng</h3><p>Tạo đơn giao nội địa, in tem giao hàng.</p></div>
+            </div>
+          </div>
+        </div>
+        <p class="note route-note">Tuyến Jakarta → TP.HCM là ví dụ. Kho và tuyến được cấu hình theo doanh nghiệp.</p>
+      </div>
+    </section>
+
+    <!-- BÀN KHO -->
+    <section class="sec" id="ban-kho">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Ở bàn kho</span><h2>Chặn lỗi ngay lúc quét.</h2></div>
+          <p>Mỗi màn hình chỉ hỏi những gì cần cho bước đó. Thiếu dữ liệu thì không cho xác nhận. Quét sai thì báo lý do cụ thể, trước khi kiện rời khỏi bàn.</p>
+        </div>
+
+        <div class="ledger">
+          <!-- 01 -->
+          <div class="row">
+            <div class="no">01</div>
+            <div class="body">
+              <h3>Nhập kho</h3>
+              <p>Quét mã vận đơn, ứng dụng tự tìm đơn và hiện khách hàng, tuyến, mặt hàng. Nhân viên chụp ảnh, nhập số đo, rồi xác nhận.</p>
+              <ul>
+                <li>Ảnh chụp trực tiếp từ camera. Đơn có đồng kiểm thì bắt buộc thêm ảnh kiểm tra, chụp cả hai bằng một lần bấm.</li>
+                <li>Hàng thường cần cân nặng. Hàng cồng kềnh cần thêm dài × rộng × cao.</li>
+                <li>Tự lưu nháp sau mỗi bước. Video đồng kiểm tuỳ chọn theo từng máy.</li>
+              </ul>
+            </div>
+            <div class="panel">
+              <div class="panel-hd"><span class="lbl">Nhập kho mới · bước 3/4</span><span class="mono">MV24081173</span></div>
+              <div class="fields">
+                <div><span class="lbl">Dài cm</span><b>42</b></div>
+                <div><span class="lbl">Rộng cm</span><b>30</b></div>
+                <div><span class="lbl">Cao cm</span><b>25</b></div>
+                <div class="empty"><span class="lbl">Kg</span><b>—</b></div>
+              </div>
+              <div class="photos">
+                <div><span class="ph"></span>Ảnh hàng hoá</div>
+                <div><span class="ph none"></span>Ảnh kiểm tra (bắt buộc)</div>
+              </div>
+              <div class="missing">Còn thiếu: Ảnh kiểm tra, Cân nặng</div>
+            </div>
+          </div>
+
+          <!-- 02 -->
+          <div class="row">
+            <div class="no">02</div>
+            <div class="body">
+              <h3>Đóng thùng</h3>
+              <p>Ba cách đóng thùng cho ba kiểu bàn kho. Kiện nào cũng được quét, thùng nào cũng có tem.</p>
+              <div class="modes">
+                <div><b>Quét tạo kiện</b><span>Quét liền nhiều mã, kiểm tra một lần, loại mã lỗi bằng một nút.</span></div>
+                <div><b>Xen kẽ</b><span>Mở nhiều thùng cùng lúc, quét tem thùng để chuyển qua lại.</span></div>
+                <div><b>Gộp nhóm</b><span>Một thùng một lúc, đóng xong mới mở thùng mới.</span></div>
+              </div>
+            </div>
+            <div class="panel rej">
+              <div class="panel-hd"><span class="lbl">Bị chặn khi quét</span><span class="mono">thùng JKT-SGN-07</span></div>
+              <div class="scroll-x">
+                <table>
+                  <tr><td><span class="x">✕</span>MV24081190</td><td>Kiện đã nằm trong thùng JKT-SGN-05</td></tr>
+                  <tr><td><span class="x">✕</span>MV24081133</td><td>Kiện đang vận chuyển</td></tr>
+                  <tr><td><span class="x">✕</span>MV24081121</td><td>Sai tuyến: kiện đi Hà Nội</td></tr>
+                  <tr><td><span class="x">✕</span>MV24081109</td><td>Kiện chưa nhập kho</td></tr>
+                  <tr><td><span class="x">✕</span>JKT-SGN-02</td><td>Thùng đã bay, không thêm kiện được</td></tr>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 03 -->
+          <div class="row">
+            <div class="no">03</div>
+            <div class="body">
+              <h3>Tiếp nhận</h3>
+              <p>Ở Kho Phát, quét mã thùng để mở phiên tiếp nhận, rồi quét từng kiện bên trong. Bộ đếm chạy tới khi đủ.</p>
+              <ul>
+                <li>Ô mã thùng và ô mã kiện tách riêng. Quét nhầm ô, ứng dụng nhận ra ngay.</li>
+                <li>Kiện chia theo đã và chưa thanh toán phí ship, để không giao nhầm kiện còn nợ phí.</li>
+              </ul>
+            </div>
+            <div class="panel">
+              <div class="panel-hd"><span class="lbl">Phiên tiếp nhận</span><span class="mono">JKT-SGN-07</span></div>
+              <div class="meter">
+                <div class="big mono">17<small> / 24 kiện</small></div>
+                <div class="bar"><i></i></div>
+              </div>
+              <div class="split">
+                <div><span>Đã TT ship</span><b>15</b></div>
+                <div><span>Chưa TT</span><b style="color:var(--laser)">2</b></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 04 -->
+          <div class="row">
+            <div class="no">04</div>
+            <div class="body">
+              <h3>Giao hãng</h3>
+              <p>Tạo đơn giao hàng nội địa ngay trên máy và in tem giao hàng. Tỉnh, phường chọn từ danh sách có tìm kiếm không dấu.</p>
+              <ul>
+                <li>In hàng loạt tem giao hàng bằng một nút.</li>
+                <li>In lại tem không tạo đơn mới. Tem đã tải vẫn in được khi mất mạng.</li>
+              </ul>
+            </div>
+            <div class="panel">
+              <div class="panel-hd"><span class="lbl">Chờ xuất</span><span class="mono">hôm nay</span></div>
+              <div class="split" style="border-top:0"><div><span>Đơn đã tạo</span><b>38</b></div><div><span>Tem đã in</span><b>38</b></div></div>
+              <div class="split"><div><span>Chờ xuất</span><b>6</b></div><div><span>Đã xuất</span><b>32</b></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="note" style="margin-top:12px">Số liệu trong các bảng là minh hoạ.</p>
+      </div>
+    </section>
+
+    <!-- OFFLINE -->
+    <section class="sec" id="offline">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Offline</span><h2>Mất sóng thì làm tiếp.</h2></div>
+          <p>Mọi thao tác ghi được lưu vào cơ sở dữ liệu trên máy trước. Khi có mạng, nhân viên bấm đồng bộ, ứng dụng gửi lên theo đúng thứ tự đã làm và hiện tiến trình.</p>
+        </div>
+
+        <div class="flow" aria-label="Trạng thái một kiện trên máy">
+          <div class="s">NHÁP<small>Đang nhập dở</small></div>
+          <span class="ar">→</span>
+          <div class="s wait">CHỜ GỬI<small>Đã lưu trên máy</small></div>
+          <span class="ar">→</span>
+          <div class="or">
+            <div class="s ok">ĐÃ ĐỒNG BỘ<small>Hệ thống đã nhận</small></div>
+            <div class="s no">CẦN XỬ LÝ<small>Sửa mã hoặc chuyển vô chủ</small></div>
+          </div>
+        </div>
+
+        <div class="cols">
+          <div>
+            <h3>Làm được khi mất mạng <span class="tag ok">Offline</span></h3>
+            <ul>
+              <li>Nhập kho: quét, chụp, cân, đo, lưu nháp</li>
+              <li>Ghi nhận kiện không có mã hoặc không rõ chủ</li>
+              <li>Tiếp nhận thùng và quét kiện</li>
+              <li>Quét kiện vào thùng đã có, gỡ kiện khỏi thùng</li>
+              <li>In lại tem giao hàng đã tải</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Cần có mạng <span class="tag wait">Online</span></h3>
+            <ul>
+              <li>Đăng nhập lần đầu trên máy</li>
+              <li>Tạo thùng mới, vì hệ thống cấp mã thùng</li>
+              <li>Tạo đơn giao hàng nội địa</li>
+              <li>Mã gộp nhiều kiện con</li>
+            </ul>
+          </div>
+        </div>
+
+        <dl class="facts">
+          <div><dt>Gửi đúng thứ tự</dt><dd>Thao tác gửi lần lượt theo thời điểm làm. Gặp lỗi mạng thì dừng, không gửi vượt.</dd></div>
+          <div><dt>Không ghi trùng</dt><dd>Hết thời gian chờ thì kiểm tra lại kết quả trước khi gửi lại. Kiện đã nhập từ máy khác tự đánh dấu đã đồng bộ.</dd></div>
+          <div><dt>Thử lại có giới hạn</dt><dd>Lỗi mạng được thử lại tối đa 3 lần. Lỗi nghiệp vụ báo ngay cho nhân viên.</dd></div>
+          <div><dt>Ảnh nhẹ</dt><dd>Ảnh trên 350 KB được nén trước khi gửi, hai ảnh tải song song, gửi xong thì xoá bản trên máy.</dd></div>
+          <div><dt>Nhiều ca, một máy</dt><dd>Dữ liệu tách theo tài khoản và theo kho. Ca sau không thấy dữ liệu dở của ca trước.</dd></div>
+          <div><dt>Mở app khi chưa có mạng</dt><dd>Sau lần đăng nhập đầu, dùng được dữ liệu đã lưu trong 24 giờ.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- TEM & MÁY IN -->
+    <section class="sec" id="tem">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Tem &amp; máy in</span><h2>In tem tại bàn, không cần máy tính.</h2></div>
+          <p>Ứng dụng tự dựng lệnh in ESC/POS và tự vẽ mã vạch Code128 thành ảnh, nên mã vạch luôn vừa khổ giấy 58mm. Nút in chỉ hiện khi có máy in sẵn sàng.</p>
+        </div>
+
+        <div class="strips">
+          <figure class="strip">
+            <div class="thermal tear">
+              <div class="hd"><span>PARCEL</span><span>1/1</span></div>
+              <hr>
+              <div class="bc"><svg data-barcode="MV24081152" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+              <div class="human">MV24081152</div>
+              <hr>
+              <div class="grid"><span>L 60 W 40</span><span>H 35 KG 12.4</span><span>WH: JKT-01</span><span>CUS: C00917</span></div>
+              <hr>
+              <div>TRK: JX4471209385</div>
+            </div>
+            <figcaption><b>Tem kiện</b><span>Mã vận hành, mã vận đơn, số đo, kho, khách, giờ nhận.</span></figcaption>
+          </figure>
+          <figure class="strip">
+            <div class="thermal tear">
+              <div class="hd"><span>BOX LABEL</span><span>JKT → SGN</span></div>
+              <hr>
+              <div class="big">HCMC</div>
+              <div class="bc"><svg data-barcode="JKT-SGN-07" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+              <div class="human">JKT-SGN-07</div>
+            </div>
+            <figcaption><b>Tem thùng</b><span>Điểm đến in to nhất, đọc được từ xa trên kệ.</span></figcaption>
+          </figure>
+          <figure class="strip">
+            <div class="thermal tear">
+              <div class="hd"><span>DELIVERY</span><span>COD 0</span></div>
+              <hr>
+              <div class="bc"><svg data-barcode="860214337701" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+              <div class="human">860214337701</div>
+              <hr>
+              <div>TO: NGUYEN VAN A</div>
+              <div>Q. BINH THANH, TP HCM</div>
+              <div>KG 3.20 · CHO XEM HANG</div>
+            </div>
+            <figcaption><b>Tem giao hàng</b><span>In hàng loạt; in lại không tạo đơn mới.</span></figcaption>
+          </figure>
+        </div>
+
+        <div class="hw">
+          <div>
+            <h3>Máy POS Android có máy in</h3>
+            <p>Quét, chụp và in trên cùng một thiết bị cầm tay. Ứng dụng báo khi máy in hết giấy hoặc quá nhiệt.</p>
+            <dl><dt>Đã chạy trên</dt><dd>OCOM Q1</dd><dt>Kết nối</dt><dd>Máy in tích hợp</dd></dl>
+          </div>
+          <div>
+            <h3>Điện thoại + máy in Bluetooth</h3>
+            <p>Tìm máy in, ghép đôi và in thử ngay trong ứng dụng. Máy nhớ máy in đã ghép.</p>
+            <dl><dt>Đã chạy với</dt><dd>Xprinter XP-P504A</dd><dt>Kết nối</dt><dd>Bluetooth LE, ESC/POS, 384 chấm mỗi dòng</dd></dl>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI -->
+    <section class="ai" id="ai">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Tiếp theo</span><h2>Đọc những gì không phải mã vạch.<span class="dev">Đang phát triển</span></h2></div>
+          <p>Kiện vô chủ, hoá đơn bỏ trong kiện, ảnh đồng kiểm: những thứ này hiện vẫn cần người đọc. Chúng tôi đang xây phần đọc ảnh bằng mô hình Claude của Anthropic. Ứng dụng gợi ý, nhân viên xác nhận.</p>
+        </div>
+        <div class="ai-grid">
+          <div>
+            <div class="uses">
+              <div><h3>Tìm chủ cho kiện vô chủ</h3><p>Đọc tên người nhận, số điện thoại, mã đơn của sàn trên ảnh bao bì, rồi gợi ý đơn hàng khớp nhất.</p></div>
+              <div><h3>Trích xuất hoá đơn trong kiện</h3><p>Chụp hoá đơn hoặc phiếu đóng gói, nhận lại mặt hàng, số lượng, giá trị theo một khuôn cố định để đối chiếu với đơn.</p></div>
+              <div><h3>Hỗ trợ đồng kiểm</h3><p>So ảnh kiểm tra với mô tả đơn, đánh dấu kiện có dấu hiệu sai mẫu, thiếu số lượng hoặc hư hỏng để người kiểm tra xem lại.</p></div>
+            </div>
+            <p class="today"><b>Hiện nay:</b> kiện vô chủ được nhập kho với ảnh, cân nặng, mã đọc được trên bao bì và mã tạm. Bộ phận chăm sóc khách hàng lọc theo loại đơn, mã thùng, chuyến bay để tìm chủ.</p>
+          </div>
+          <div>
+            <div class="parcel" aria-label="Minh hoạ: ảnh bao bì kiện vô chủ, các vùng chữ được nhận diện">
+              <div class="sticker">
+                <div class="k">PENERIMA / RECIPIENT</div>
+                <div><span class="hit" data-k="TÊN">Tran Thi B</span></div>
+                <div><span class="hit" data-k="SĐT">+84 90x xxx 218</span></div>
+                <div style="margin-top:8px" class="k">NO. PESANAN / ORDER NO.</div>
+                <div><span class="hit" data-k="MÃ ĐƠN SÀN">2409T8KQ7WXN</span></div>
+                <div style="margin-top:8px" class="k">BERAT / WEIGHT</div>
+                <div>1.2 kg</div>
+              </div>
+            </div>
+            <div class="json" aria-label="Kết quả trích xuất mẫu"><span class="c">// kết quả gợi ý, chờ nhân viên xác nhận</span>
+{
+  "recipient_name": <span class="s">"Tran Thi B"</span>,
+  "phone_last4": <span class="s">"x218"</span>,
+  "marketplace_order_id": <span class="s">"2409T8KQ7WXN"</span>,
+  "matched_order": <span class="s">"MV24080866"</span>,
+  "confidence": <span class="n">0.91</span>
+}</div>
+            <p class="note">Minh hoạ thiết kế. Tính năng này chưa có trong phiên bản hiện tại.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- THÔNG SỐ -->
+    <section class="sec" id="thong-so">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Thông số</span><h2>Xây cho ca làm việc dài.</h2></div>
+          <p>Ứng dụng React Native trên Expo. Android là nền tảng chính, bản iOS đang chuẩn bị. Cập nhật qua mạng, nhân viên chủ động bấm cập nhật khi rảnh tay.</p>
+        </div>
+        <div class="specs">
+          <div><b>7</b><span>loại mã vạch, gồm Code128, QR, EAN, PDF417, DataMatrix</span></div>
+          <div><b>4</b><span>ngôn ngữ: Tiếng Việt, English, 日本語, Bahasa Indonesia</span></div>
+          <div><b>6</b><span>loại thao tác kho được xếp hàng chờ khi mất mạng</span></div>
+          <div><b>270+</b><span>bài kiểm thử tự động, hơn 80 bài cho phần in tem</span></div>
+        </div>
+        <p class="stack">Expo SDK 55 · React Native 0.83 · TypeScript · SQLite · React Query · Zustand · Bluetooth LE · ESC/POS · Jest</p>
+      </div>
+    </section>
+
+    <!-- HỎI ĐÁP -->
+    <section class="sec" id="hoi-dap">
+      <div class="wrap">
+        <div class="sec-hd">
+          <div><span class="lbl">Hỏi đáp</span><h2>Câu hỏi thường gặp</h2></div>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>Mavalo chạy trên thiết bị nào?</summary>
+            <p>Máy Android. Thiết bị chính là máy POS cầm tay có máy in nhiệt tích hợp. Điện thoại Android thông thường dùng được khi kết nối máy in nhiệt Bluetooth. Bản iOS đang chuẩn bị.</p>
+          </details>
+          <details>
+            <summary>Dữ liệu có tự đồng bộ khi có mạng lại không?</summary>
+            <p>Hiện tại nhân viên bấm đồng bộ để chủ động thời điểm gửi và theo dõi tiến trình. Ứng dụng luôn hiện trạng thái trực tuyến hay ngoại tuyến và số mục đang chờ gửi.</p>
+          </details>
+          <details>
+            <summary>Có kết nối với hệ thống quản lý đơn hàng của tôi không?</summary>
+            <p>Ứng dụng làm việc qua API với hệ thống quản lý phía sau. Hãy liên hệ để trao đổi về hệ thống bạn đang dùng.</p>
+          </details>
+          <details>
+            <summary>Nhân viên không đọc được tiếng Việt thì sao?</summary>
+            <p>Ứng dụng có tiếng Việt, tiếng Anh, tiếng Nhật và tiếng Indonesia, tự nhận theo ngôn ngữ của máy và đổi được ngay ở màn hình đăng nhập. Tem kiện và tem thùng in chữ không dấu để máy in nào cũng in được.</p>
+          </details>
+          <details>
+            <summary>Khi nào có tính năng AI?</summary>
+            <p>Phần đọc ảnh bằng Claude đang được phát triển. Nếu bạn muốn chạy thử sớm trên ảnh kiện thật của kho mình, hãy gửi email cho chúng tôi.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIÊN HỆ -->
+    <section class="sec" id="lien-he">
+      <div class="wrap">
+        <div class="contact">
+          <div>
+            <h2>Đặt lịch demo tại kho của bạn.</h2>
+            <p>Gửi email kèm số kiện mỗi ngày, tuyến hàng và thiết bị bạn đang dùng. Chúng tôi sẽ hẹn lịch chạy thử trên máy thật.</p>
+          </div>
+          <div>
+            <span class="lbl">Email</span>
+            <span class="mail" id="mail">hello@mavalo.io.vn</span>
+            <div class="cta">
+              <a class="btn" href="mailto:hello@mavalo.io.vn?subject=%C4%90%E1%BA%B7t%20l%E1%BB%8Bch%20demo%20Mavalo">Gửi email</a>
+              <button class="btn ghost" type="button" id="copy">Sao chép</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>MAVALO · mavalo.io.vn</span>
+      <span>hello@mavalo.io.vn</span>
+      <span>© 2026</span>
+    </div>
+  </footer>
+
+  <script>
+    // Code128 bộ B, cùng bảng mẫu với services/code128.ts của ứng dụng.
+    (function () {
+      var P = ['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+        '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+        '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+        '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+        '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+        '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+        '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+        '112412','122114','122411','142112','142211','241211','221114','413111','241112','134111',
+        '111242','121142','121241','114212','124112','124211','411212','421112','421211','212141',
+        '214121','412121','111143','111341','131141','114113','114311','411113','411311','113141',
+        '114131','311141','411131','211412','211214','211232','2331112'];
+      function widths(data) {
+        var v = [], sum = 104, i;
+        for (i = 0; i < data.length; i++) { var c = data.charCodeAt(i); if (c >= 32 && c <= 126) v.push(c - 32); }
+        for (i = 0; i < v.length; i++) sum += v[i] * (i + 1);
+        var sym = [104].concat(v, [sum % 103, 106]), w = [];
+        sym.forEach(function (s) { P[s].split('').forEach(function (d) { w.push(+d); }); });
+        return w;
+      }
+      document.querySelectorAll('svg[data-barcode]').forEach(function (svg) {
+        var w = widths(svg.getAttribute('data-barcode')), quiet = 10, x = quiet, out = '', bar = true;
+        w.forEach(function (n) { if (bar) out += '<rect x="' + x + '" y="0" width="' + n + '" height="60" fill="#141513"/>'; x += n; bar = !bar; });
+        svg.setAttribute('viewBox', '0 0 ' + (x + quiet) + ' 60');
+        svg.innerHTML = out;
+      });
+
+      var btn = document.getElementById('copy');
+      if (btn) btn.addEventListener('click', function () {
+        var text = document.getElementById('mail').textContent;
+        function done() { btn.textContent = 'Đã sao chép'; setTimeout(function () { btn.textContent = 'Sao chép'; }, 1800); }
+        function fallback() {
+          var r = document.createRange(); r.selectNodeContents(document.getElementById('mail'));
+          var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+          btn.textContent = 'Nhấn Ctrl+C';
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+        else fallback();
+      });
+    })();
+  </script>
+</body>
+</html>
